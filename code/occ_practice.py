@@ -23,10 +23,10 @@ def nurbs_example(n):
 
 if __name__ == '__main__':
     # B-spline example
-    spline = bspline_example(3)
+    # spline = bspline_example(3)
 
     # NURBS example
-    # spline = nurbs_example(0)
+    spline = nurbs_example(0)
 
     # Display spline
     display.DisplayShape(spline, update=True)

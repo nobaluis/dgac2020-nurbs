@@ -304,7 +304,7 @@ $$
 ![Ejemplo de un circuló con una curva NURBS\label{ex_04_02}](images/ex_04_curve.png){width=80%}
 
 ## 3.4. Elevación de grado
-Sea $\mathbf{C}_n(u)=\sum_{i=0}^{n} = \mathbf{a}_i u^i$ una curva polinomial de grado $n$. Podemos asignar $\mathbf{a}_{n+1}=0$ y expresar $\mathbf{C}_n(u)$ como una curva polinomial de grado $n+1$:
+Sea $\mathbf{C}_n(u)=\sum_{i=0}^{n} \mathbf{a}_i u^i$ una curva polinomial de grado $n$. Podemos asignar $\mathbf{a}_{n+1}=0$ y expresar $\mathbf{C}_n(u)$ como una curva polinomial de grado $n+1$:
 
 $$
 \mathbf{C}_{n}(u)=\mathbf{C}_{n+1}(u)=\sum_{i=0}^{n+1} \mathbf{a}_{i} u^{i}
