@@ -1,5 +1,7 @@
 import numpy as np
 
+EPSILON = 1e-10
+
 
 def div(n, d):
     """Cox deBoor special division"""
@@ -28,11 +30,33 @@ def basis(i, p, u, u_list):
         return a + b
 
 
-basis_vector = np.vectorize(basis, excluded=['u_list'])  # vectorized version of basis fucntion
+basis_vector = np.vectorize(basis, excluded=['u_list'])  # vectorized version of basis function
+
+
+def basis_d(i, p, u, u_list):
+    """Computes the derivative of the basis function of degree p
+
+    Parameters
+    ----------
+    i: int
+        The index of basis function related to ith control point
+    p: int
+        The degree of basis function
+    u: double
+        Parametric value to evaluate the function
+    u_list: numpy.array
+        The knot vector
+    """
+    a = div(p - 1, u_list[i + p] - u_list[i]) * basis(i, p - 1, u, u_list)
+    b = div(p - 1, u_list[i + p + 1] - u_list[i + 1]) * basis(i + 1, p - 1, u, u_list)
+    return a - b
+
+
+basis_d_vector = np.vectorize(basis_d, excluded=['u_list'])  # vectorized version of basis_d function
 
 
 def point_eval(p, p_list, u_list, u):
-    """Evaluate the points in the curve over the parametric variable and knot vector
+    """Evaluate the points in the B-Spline of degree p over the parametric variable u
 
     Parameters
     ----------
@@ -56,7 +80,7 @@ def point_eval(p, p_list, u_list, u):
     n, d = p_list.shape
     m, length = len(u_list), len(u)
     if m != (n + p + 1):
-        raise ValueError('Wrong knots dimension')
+        raise ValueError('Wrong knot vector dimension')
 
     # Evaluate points
     u[-1] -= 1e-10  # for stability
@@ -69,13 +93,106 @@ def point_eval(p, p_list, u_list, u):
     return curve, basis_functions
 
 
-def do_perspective_map(p_list, w_list):
+def derivatives_eval(p, p_list, u_list, u):
+    """Evaluate the first derivative of the B-Spline of degree p
+
+     Parameters
+    ----------
+    p: int
+        Degree of curve
+    p_list: numpy.array
+        Set of control points
+    u: numpy.array
+        The parametric variable
+    u_list: numpy.array
+        The knot vector, dimension must be m = n + p + 1
+
+    Return
+    ------
+    curve_derivatives: numpy.array
+        The first derivative of the curve over u
+    basis_derivatives: numpy.array
+        The derivative of B-spline basis functions over u
+    """
+    n, d = p_list.shape
+    m, length = len(u_list), len(u)
+
+    u[-1] -= EPSILON  # for stability
+    basis_derivatives = np.empty((n, length))
+    curve_derivatives = np.zeros((length, d))
+    for i in range(n):
+        basis_d_ip = basis_d_vector(i, p, u, u_list=u_list)
+        basis_derivatives[i, :] = basis_d_ip
+        curve_derivatives += p_list * basis_d_ip[:, None]
+    return curve_derivatives, basis_derivatives
+
+
+def surface_eval(p, q, p_matrix, u_list, v_list, u, v):
+    """Computes the B-Spline surface over u and v parametric variables
+
+    p, q: int
+        Degrees of functions
+    p_matrix: numpy.array
+        The matrix of control points
+    u_list, v_list: numpy.array
+        The knots vectors of u and v
+    u, v: numpy.array
+        The parametric coordinates vectors
+
+    Return
+    ------
+    surface: numpy.array
+        The grid of points over u and v
+    basis_u, basis_v: numpy.array
+        The basis functions of degree p and q respectively
+    """
+    n, m, d = p_matrix.shape
+    r, s = len(u_list), len(v_list)
+    if r != (n + p + 1) or s != (m + q + 1):
+        raise ValueError('Wrong knot vector(s) dimension')
+
+    # Evaluate points on surface
+    u[-1] -= EPSILON
+    v[-1] -= EPSILON
+    basis_u = np.empty((n, len(u)))
+    basis_v = np.empty((m, len(v)))
+    surface = np.zeros((len(u), len(v), d))
+
+    # Pre compute basis N_jq functions
+    for j in range(m):
+        basis_v[j, :] = basis_vector(j, q, v, u_list=v_list)
+
+    # Evaluate surface
+    for i in range(n):
+        basis_u[i, :] = basis_vector(i, p, u, u_list=u_list)
+        for j in range(m):
+            surface += (basis_u[i, :, None] * basis_v[j, :])[:, :, None] * p_matrix[i, j, :]
+    return surface, basis_u, basis_v
+
+
+def homogeneous_coord(p_list, w_list):
+    """Express the the control points in homogeneous coordinates
+
+    Parameters
+    ----------
+    p_list: numpy.array
+        The set of control points
+    w_list: numpy.array
+        The weights vector
+    """
     pw_list = p_list * w_list[:, None]
     pw_list = np.column_stack((pw_list, w_list))
     return pw_list
 
 
-def undo_perspective_map(pw_list):
+def perspective_map(pw_list):
+    """Do the perspective map (H)
+
+    Parameters
+    ----------
+    pw_list: numpy.array
+        Set of control points expressed in high order dimension
+    """
     return pw_list[:, :-1] / pw_list[:, -1, None]
 
 
@@ -98,7 +215,12 @@ class Bspline(object):
         self.p = p
         self.p_list = p_list
         self.u_list = u_list
+        self.u = u
         self.curve, self.basis_funcs = point_eval(p, p_list, u_list, u)
+
+    def derivatives(self):
+        """Computes the first derivatives"""
+        return derivatives_eval(self.p, self.p_list, self.u_list, self.u)
 
 
 class Nurbs(Bspline):
@@ -117,9 +239,23 @@ class Nurbs(Bspline):
     u: numpy.array
         Parametric coordinates vector
     """
-
     def __init__(self, p, p_list, u_list, w_list, u):
         self.w_list = w_list
-        pw_list = do_perspective_map(p_list, w_list)
+        pw_list = homogeneous_coord(p_list, w_list)
         super(Nurbs, self).__init__(p, pw_list, u_list, u)
-        self.curve = undo_perspective_map(self.curve)
+        self.curve = perspective_map(self.curve)
+
+    def derivatives(self):
+        raise NotImplementedError('This function is not ready')
+
+
+class BsplineSurface(object):
+    def __init__(self, p, q, p_matrix, u_list, v_list, u, v):
+        self.p = p
+        self.q = q
+        self.p_matrix = p_matrix
+        self.u_list = u_list
+        self.v_list = v_list
+        self.u = u
+        self.v = v
+        self.surface, self.basis_u, self.basis_v = surface_eval(p, q, p_matrix, u_list, v_list, u, v)
