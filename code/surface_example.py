@@ -1,5 +1,3 @@
-import time
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,13 +22,10 @@ v = np.linspace(v_list[0], v_list[-1], 50)
 
 # %% Bspline surface evaluation (own)
 spline_surface = BsplineSurface(p, q, p_matrix, u_list, v_list, u, v)
-# Eval the surface pooints
-t0 = time.time()
+normal = spline_surface.normal()
 points = spline_surface.surface
-tf = time.time() - t0
-print(tf * 1000.0)
 
-# %% Naive plot (matplotlib)
+# %% Naive plot
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 for i in range(len(u)):
@@ -41,7 +36,7 @@ for i in range(len(u)):
         ax.scatter3D(x, y, z, color='blue')
 fig.show()
 
-# %% Efficient plot (matplotlib)
+# %% Efficient plot
 matplotlib.use("TkAgg")
 n, m, d = points.shape
 points.shape = (n * m, d)
@@ -49,6 +44,14 @@ x, y, z = points[:, 0], points[:, 1], points[:, 2]
 fig = plt.figure()
 ax = plt.axes(projection='3d')
 ax.scatter3D(x, y, z, c=z, cmap='viridis')
+fig.show()
+
+# %% Normal field plot
+normal.shape = (n * m, d)
+n0, n1, n2 = normal[:, 0], normal[:, 1], normal[:, 2]
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.quiver(x, y, z, n0, n1, n2, length=0.09, color='red')
 fig.show()
 
 # %% OCC Surface

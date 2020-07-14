@@ -239,6 +239,7 @@ class Nurbs(Bspline):
     u: numpy.array
         Parametric coordinates vector
     """
+
     def __init__(self, p, p_list, u_list, w_list, u):
         self.w_list = w_list
         pw_list = homogeneous_coord(p_list, w_list)
@@ -259,3 +260,30 @@ class BsplineSurface(object):
         self.u = u
         self.v = v
         self.surface, self.basis_u, self.basis_v = surface_eval(p, q, p_matrix, u_list, v_list, u, v)
+
+    def normal(self):
+        """Computes the surface normal of the B-Spline surface"""
+        n, m, d = self.p_matrix.shape
+        s_du = np.zeros((len(self.u), len(self.v), d))
+        s_dv = np.zeros((len(self.u), len(self.v), d))
+        for i in range(n):
+            for j in range(m):
+                # Partial derivatives
+                s_du += (self.basis_du[i, :, None] * self.basis_v[j, :])[:, :, None] * self.p_matrix[i, j, :]
+                s_dv += (self.basis_u[i, :, None] * self.basis_dv[j, :])[:, :, None] * self.p_matrix[i, j, :]
+        return np.cross(s_du, s_dv)
+
+
+class NurbsSurface(BsplineSurface):
+    def __init__(self, p, q, p_matrix, w_matrix, u_list, v_list, u, v):
+        self.w_matrix = w_matrix
+        # reshape set of points and express in h. coord.
+        p_shape = p_matrix.shape
+        pw_list = homogeneous_coord(p_matrix.reshape(p_shape[0] * p_shape[1], p_shape[2]), w_matrix.reshape(-1))
+        # build the b-spline
+        super().__init__(p, q, pw_list.reshape(p_shape), u_list, v_list, u, v)
+        # perspective map
+        self.p_matrix = p_matrix
+        surf_shape = self.surface.shape
+        self.surface = perspective_map(self.surface.reshape(surf_shape[0] * surf_shape[1], surf_shape[2]))
+        self.surface.shape = surf_shape
