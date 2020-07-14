@@ -155,19 +155,22 @@ def surface_eval(p, q, p_matrix, u_list, v_list, u, v):
     u[-1] -= EPSILON
     v[-1] -= EPSILON
     basis_u = np.empty((n, len(u)))
+    basis_du = np.empty((n, len(u)))
     basis_v = np.empty((m, len(v)))
-    surface = np.zeros((len(u), len(v), d))
+    basis_dv = np.empty((m, len(v)))
 
-    # Pre compute basis N_jq functions
-    for j in range(m):
-        basis_v[j, :] = basis_vector(j, q, v, u_list=v_list)
-
-    # Evaluate surface
+    # Compute basis functions
     for i in range(n):
         basis_u[i, :] = basis_vector(i, p, u, u_list=u_list)
-        for j in range(m):
-            surface += (basis_u[i, :, None] * basis_v[j, :])[:, :, None] * p_matrix[i, j, :]
-    return surface, basis_u, basis_v
+        basis_du[i, :] = basis_d_vector(i, p, u, u_list=u_list)
+    for j in range(m):
+        basis_v[j, :] = basis_vector(j, q, v, u_list=v_list)
+        basis_dv[j, :] = basis_d_vector(j, q, v, u_list=v_list)
+
+    # Compute the tensor product
+    surface = np.einsum('ni,nmd,mj->ijd', basis_u, p_matrix, basis_v)
+
+    return surface, basis_u, basis_v, basis_du, basis_dv
 
 
 def homogeneous_coord(p_list, w_list):
@@ -259,18 +262,13 @@ class BsplineSurface(object):
         self.v_list = v_list
         self.u = u
         self.v = v
-        self.surface, self.basis_u, self.basis_v = surface_eval(p, q, p_matrix, u_list, v_list, u, v)
+        self.surface, self.basis_u, self.basis_v, self.basis_du, self.basis_dv = \
+            surface_eval(p, q, p_matrix, u_list, v_list, u, v)
 
     def normal(self):
         """Computes the surface normal of the B-Spline surface"""
-        n, m, d = self.p_matrix.shape
-        s_du = np.zeros((len(self.u), len(self.v), d))
-        s_dv = np.zeros((len(self.u), len(self.v), d))
-        for i in range(n):
-            for j in range(m):
-                # Partial derivatives
-                s_du += (self.basis_du[i, :, None] * self.basis_v[j, :])[:, :, None] * self.p_matrix[i, j, :]
-                s_dv += (self.basis_u[i, :, None] * self.basis_dv[j, :])[:, :, None] * self.p_matrix[i, j, :]
+        s_du = np.einsum('ni,nmd,mj->ijd', self.basis_du, self.p_matrix, self.basis_v)
+        s_dv = np.einsum('ni,nmd,mj->ijd', self.basis_u, self.p_matrix, self.basis_dv)
         return np.cross(s_du, s_dv)
 
 
