@@ -1,9 +1,11 @@
 import numpy as np
+from OCC.Core.BRepBuilderAPI import BRepBuilderAPI_MakeFace
 from OCC.Core.Geom import Geom_BSplineCurve, Geom_BSplineSurface
 from OCC.Core.TColStd import TColStd_Array1OfReal, TColStd_Array1OfInteger, TColStd_Array2OfInteger, \
     TColStd_Array2OfReal
 from OCC.Core.TColgp import TColgp_Array1OfPnt, TColgp_Array2OfPnt
 from OCC.Core.gp import gp_Pnt
+from OCC.Extend import DataExchange
 
 
 def np2occ_points(pts):
@@ -36,7 +38,7 @@ def np2occ(data, container, cast):
     ----------
     data: numpy.array
         The data to be converted
-    container: OCC.Core.TColStd.*
+    container: PythonOCC.Core.TColStd.*
         The target container of data
     cast: data type
         Type of data to force cast of data values
@@ -77,7 +79,7 @@ def np2occ_auto(v):
 
 
 def nurbs(p_list, u_list, w_list):
-    """Construct NURBS curve from OCC with numpy arrays
+    """Construct NURBS curve from PythonOCC with numpy arrays
 
     Parameters
     ----------
@@ -98,7 +100,7 @@ def nurbs(p_list, u_list, w_list):
 
 
 def bspline(p_list, u_list):
-    """Builds B-spline curve from OCC with numpy arrays
+    """Builds B-spline curve from PythonOCC with numpy arrays
 
     Parameters
     ----------
@@ -111,7 +113,7 @@ def bspline(p_list, u_list):
 
 
 def nurbs_surf(p_matrix, w_matrix, u_list, v_list):
-    """Builds NURBS surface from OCC with numpy arrays
+    """Builds NURBS surface from PythonOCC with numpy arrays
 
     Parameters
     ----------
@@ -129,7 +131,7 @@ def nurbs_surf(p_matrix, w_matrix, u_list, v_list):
     n, m, d = p_matrix.shape
     p = len(u_list) - n - 1
     q = len(v_list) - m - 1
-    # OCC Arrays
+    # PythonOCC Arrays
     poles = np2occ_points(p_matrix)
     weights = np2occ_auto(w_matrix)
     u_knots = np2occ_auto(u_val)
@@ -140,7 +142,7 @@ def nurbs_surf(p_matrix, w_matrix, u_list, v_list):
 
 
 def bspline_surf(p_matrix, u_list, v_list):
-    """Builds B-Spline surface from OCC with numpy arrays
+    """Builds B-Spline surface from PythonOCC with numpy arrays
 
         Parameters
         ----------
@@ -150,3 +152,38 @@ def bspline_surf(p_matrix, u_list, v_list):
             Knots vectors
         """
     return nurbs_surf(p_matrix, np.ones((len(p_matrix), len(p_matrix[0]))), u_list, v_list)
+
+
+def surf2face(surf):
+    """Converts geo_surface to face"""
+    return BRepBuilderAPI_MakeFace(surf, 1e-7).Face()
+
+
+def export_surf(surf, filename, l_deflection=1e-3):
+    """Save geo_surf object into stl file"""
+    DataExchange.write_stl_file(
+        surf2face(surf),
+        filename=filename,
+        linear_deflection=l_deflection
+    )
+
+
+def curve_dn(curve, u, k):
+    """Evaluates any derivative of order k of basis function of degree p at points u"""
+    n = len(u)
+    d = np.empty((n, 3))
+    for i in range(n):
+        vec = curve.DN(u[i], k)
+        d[i, :] = np.array([vec.X(), vec.Y(), vec.Z()])
+    return d
+
+
+def surf_dn(surf, u, v, k, l):
+    """Evaluates any derivative of order (k,l) of basis function of degree (p, q) at points (u,v)"""
+    n, m = len(u), len(v)
+    d = np.empty((n, m, 3))
+    for i in range(n):
+        for j in range(m):
+            vec = surf.DN(u[i], v[j], k, l)
+            d[i, j, :] = np.array([vec.X(), vec.Y(), vec.Z()])
+    return d

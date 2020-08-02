@@ -1,8 +1,7 @@
-import matplotlib.pyplot as plt
-import numpy as np
-
+import bspline
 import examples_data
-from bspline import Bspline, Nurbs
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 def plot_example(p, p_list, c_u, nip_u, u, ex_number, save_figs=False):
@@ -42,8 +41,10 @@ if __name__ == '__main__':
         p_list = bsplines[i].points
         u_list = bsplines[i].knots
         u = np.linspace(u_list[0], u_list[-1], 100)
-        spline = Bspline(p, p_list, u_list, u)
-        plot_example(p, p_list, spline.curve, spline.basis_funcs, u, i, save_figs=True)
+        spline = bspline.Bspline(p, p_list, u_list)
+        points = spline.points(u)
+        basis_funcs = bspline.get_basis_vector(u, u_list, p)
+        plot_example(p, p_list, points, basis_funcs, u, i, save_figs=False)
 
     # NURBS examples
     nurbs = examples_data.nurbs()
@@ -53,5 +54,7 @@ if __name__ == '__main__':
         u_list = nurbs[i].knots
         w_list = nurbs[i].weights
         u = np.linspace(u_list[0], u_list[-1], 100)
-        spline = Nurbs(p, p_list, u_list, w_list, u)
-        plot_example(p, p_list, spline.curve, spline.basis_funcs, u, i + len(bsplines), save_figs=True)
+        spline = bspline.Nurbs(p, p_list, u_list, w_list)
+        points = spline.points(u)
+        basis_funcs = bspline.get_basis_vector(u, u_list, p)
+        plot_example(p, p_list, points, basis_funcs, u, i + len(bsplines), save_figs=False)

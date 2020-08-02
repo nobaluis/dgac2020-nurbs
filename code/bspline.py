@@ -1,11 +1,11 @@
 import numpy as np
 
-EPSILON = 1e-10
+EPSILON = 1e-15
 
 
 def div(n, d):
     """Cox deBoor special division"""
-    return n / d if d else 0
+    return n / d if d else 0.
 
 
 def basis(i, p, u, u_list):
@@ -23,7 +23,7 @@ def basis(i, p, u, u_list):
         The knot vector
     """
     if p == 0:
-        return 1 if u_list[i] <= u < u_list[i + 1] else 0
+        return 1. if u_list[i] <= u < u_list[i + 1] else 0.
     else:
         a = div((u - u_list[i]), (u_list[i + p] - u_list[i])) * basis(i, p - 1, u, u_list)
         b = div((u_list[i + p + 1] - u), (u_list[i + p + 1] - u_list[i + 1])) * basis(i + 1, p - 1, u, u_list)
@@ -33,144 +33,38 @@ def basis(i, p, u, u_list):
 basis_vector = np.vectorize(basis, excluded=['u_list'])  # vectorized version of basis function
 
 
-def basis_d(i, p, u, u_list):
-    """Computes the derivative of the basis function of degree p
-
-    Parameters
-    ----------
-    i: int
-        The index of basis function related to ith control point
-    p: int
-        The degree of basis function
-    u: double
-        Parametric value to evaluate the function
-    u_list: numpy.array
-        The knot vector
-    """
-    a = div(p - 1, u_list[i + p] - u_list[i]) * basis(i, p - 1, u, u_list)
-    b = div(p - 1, u_list[i + p + 1] - u_list[i + 1]) * basis(i + 1, p - 1, u, u_list)
+def basis_dk(k, i, p, u, u_list):
+    """Computes the kth derivative of basis function fo degree p"""
+    if k > p:
+        raise ValueError('k should not exceed p')
+    elif k == 0:
+        return basis(i, p, u, u_list)
+    a = div(p, u_list[i + p] - u_list[i]) * basis_dk(k - 1, i, p - 1, u, u_list)
+    b = div(p, u_list[i + p + 1] - u_list[i + 1]) * basis_dk(k - 1, i + 1, p - 1, u, u_list)
     return a - b
 
 
-basis_d_vector = np.vectorize(basis_d, excluded=['u_list'])  # vectorized version of basis_d function
+basis_dk_vector = np.vectorize(basis_dk, excluded=['u_list'])  # vectorized version of basis_dk function
 
 
-def point_eval(p, p_list, u_list, u):
-    """Evaluate the points in the B-Spline of degree p over the parametric variable u
-
-    Parameters
-    ----------
-    p: int
-        Degree of curve
-    p_list: numpy.array
-        Set of control points
-    u: numpy.array
-        The parametric variable
-    u_list: numpy.array
-        The knot vector, dimension must be m = n + p + 1
-
-    Return
-    ------
-    curve: numpy.array
-        The points in the curve over u
-    basis_functions: numpy.array
-        The B-spline basis functions over u
-    """
-    # Check dimensions
-    n, d = p_list.shape
-    m, length = len(u_list), len(u)
-    if m != (n + p + 1):
-        raise ValueError('Wrong knot vector dimension')
-
-    # Evaluate points
-    u[-1] -= 1e-10  # for stability
-    basis_functions = np.empty((n, length))
-    curve = np.zeros((length, d))
+def get_basis_vector(u, u_list, p):
+    """Computes the basis functions of degree p over all values of u"""
+    u[-1] -= EPSILON  # for numeric stability
+    n = len(u_list) - p - 1
+    basis_v = np.empty((n, len(u)))
     for i in range(n):
-        basis_ip = basis_vector(i, p, u, u_list=u_list)
-        basis_functions[i, :] = basis_ip
-        curve += p_list[i] * basis_ip[:, None]
-    return curve, basis_functions
+        basis_v[i, :] = basis_vector(i, p, u, u_list=u_list)
+    return basis_v
 
 
-def derivatives_eval(p, p_list, u_list, u):
-    """Evaluate the first derivative of the B-Spline of degree p
-
-     Parameters
-    ----------
-    p: int
-        Degree of curve
-    p_list: numpy.array
-        Set of control points
-    u: numpy.array
-        The parametric variable
-    u_list: numpy.array
-        The knot vector, dimension must be m = n + p + 1
-
-    Return
-    ------
-    curve_derivatives: numpy.array
-        The first derivative of the curve over u
-    basis_derivatives: numpy.array
-        The derivative of B-spline basis functions over u
-    """
-    n, d = p_list.shape
-    m, length = len(u_list), len(u)
-
-    u[-1] -= EPSILON  # for stability
-    basis_derivatives = np.empty((n, length))
-    curve_derivatives = np.zeros((length, d))
+def get_basis_dk_vector(u, u_list, p, k):
+    """Computes the kth derivative of basis function of degree p over all values of u"""
+    u[-1] -= EPSILON  # for numeric stability
+    n = len(u_list) - p - 1
+    basis_dk_v = np.empty((n, len(u)))
     for i in range(n):
-        basis_d_ip = basis_d_vector(i, p, u, u_list=u_list)
-        basis_derivatives[i, :] = basis_d_ip
-        curve_derivatives += p_list * basis_d_ip[:, None]
-    return curve_derivatives, basis_derivatives
-
-
-def surface_eval(p, q, p_matrix, u_list, v_list, u, v):
-    """Computes the B-Spline surface over u and v parametric variables
-
-    p, q: int
-        Degrees of functions
-    p_matrix: numpy.array
-        The matrix of control points
-    u_list, v_list: numpy.array
-        The knots vectors of u and v
-    u, v: numpy.array
-        The parametric coordinates vectors
-
-    Return
-    ------
-    surface: numpy.array
-        The grid of points over u and v
-    basis_u, basis_v: numpy.array
-        The basis functions of degree p and q respectively
-    """
-    n, m, d = p_matrix.shape
-    r, s = len(u_list), len(v_list)
-    if r != (n + p + 1) or s != (m + q + 1):
-        raise ValueError('Wrong knot vector(s) dimension')
-
-    # Evaluate points on surface
-    u[-1] -= EPSILON
-    v[-1] -= EPSILON
-    basis_u = np.empty((n, len(u)))
-    basis_du = np.empty((n, len(u)))
-    basis_v = np.empty((m, len(v)))
-    basis_dv = np.empty((m, len(v)))
-
-    # Compute basis functions
-    for i in range(n):
-        basis_u[i, :] = basis_vector(i, p, u, u_list=u_list)
-        basis_du[i, :] = basis_d_vector(i, p, u, u_list=u_list)
-    for j in range(m):
-        basis_v[j, :] = basis_vector(j, q, v, u_list=v_list)
-        basis_dv[j, :] = basis_d_vector(j, q, v, u_list=v_list)
-
-    # Compute the tensor product
-    surface = np.einsum('ni,nmd,mj->ijd', basis_u, p_matrix, basis_v)
-
-    return surface, basis_u, basis_v, basis_du, basis_dv
+        basis_dk_v[i, :] = basis_dk_vector(k, i, p, u, u_list=u_list)
+    return basis_dk_v
 
 
 def homogeneous_coord(p_list, w_list):
@@ -210,24 +104,36 @@ class Bspline(object):
         Set of control points
     u_list: numpy.array
         Knots vector, dimension must be m=n+p+1
-    u: numpy.array
-        Parametric coordinates vector
     """
 
-    def __init__(self, p, p_list, u_list, u):
+    def __init__(self, p, p_list, u_list):
+        # Check dimensions
+        n, m = len(p_list), len(u_list)
+        if m != (n + p + 1):
+            raise ValueError('Wrong knot vector dimension')
         self.p = p
         self.p_list = p_list
         self.u_list = u_list
-        self.u = u
-        self.curve, self.basis_funcs = point_eval(p, p_list, u_list, u)
 
-    def derivatives(self):
-        """Computes the first derivatives"""
-        return derivatives_eval(self.p, self.p_list, self.u_list, self.u)
+    def points(self, u):
+        """Computes the points of B-Spline curve"""
+        basis_v = get_basis_vector(u, self.u_list, self.p)
+        curve_points = np.zeros((len(u), self.p_list.shape[1]))
+        for i in range(len(self.p_list)):
+            curve_points += self.p_list[i] * basis_v[i, :, None]
+        return curve_points
+
+    def derivatives(self, u, k):
+        """Computes the kth derivative of B-Spline curve"""
+        basis_d_v = get_basis_dk_vector(u, self.u_list, self.p, k)
+        curve_derivatives = np.zeros((len(u), self.p_list.shape[1]))
+        for i in range(len(self.p_list)):
+            curve_derivatives += self.p_list[i] * basis_d_v[i, :, None]
+        return curve_derivatives
 
 
 class Nurbs(Bspline):
-    """Computes NURBS curve using perspective map
+    """Computes NURBS curve
 
     Parameters
     ----------
@@ -239,49 +145,122 @@ class Nurbs(Bspline):
         Knots vector, dimension must be m=n+p+1
     w_list: numpy.array
         Wights vector
-    u: numpy.array
-        Parametric coordinates vector
     """
 
-    def __init__(self, p, p_list, u_list, w_list, u):
+    def __init__(self, p, p_list, u_list, w_list):
         self.w_list = w_list
-        pw_list = homogeneous_coord(p_list, w_list)
-        super(Nurbs, self).__init__(p, pw_list, u_list, u)
-        self.curve = perspective_map(self.curve)
+        super(Nurbs, self).__init__(p, p_list, u_list)
+
+    def points(self, u):
+        p_list_backup = self.p_list.copy()  # original control points
+        self.p_list = homogeneous_coord(self.p_list, self.w_list)  # c. points in homogeneous coord.
+        curve_points = super().points(u)  # compute points with regular B-Spline
+        self.p_list = p_list_backup  # restore original c. points
+        return perspective_map(curve_points)  # perspective map to points
 
     def derivatives(self):
         raise NotImplementedError('This function is not ready')
 
 
 class BsplineSurface(object):
-    def __init__(self, p, q, p_matrix, u_list, v_list, u, v):
+    """B-Spline surface class
+
+    Parameters
+    ----------
+    p: int
+        Degree in u direction
+    q: int
+        Degree in v direction
+    p_matrix: numpy.array
+        Matrix of control points
+    u_list: numpy.array
+        Knots vector of u
+    v_list: numpy.array
+        Knots vector of v
+    """
+
+    def __init__(self, p, q, p_matrix, u_list, v_list):
+        # Verify knot vectors dimensions
+        n, m, d = p_matrix.shape
+        r, s = len(u_list), len(v_list)
+        if r != (n + p + 1) or s != (m + q + 1):
+            raise ValueError('Wrong knot vector(s) dimension')
         self.p = p
         self.q = q
         self.p_matrix = p_matrix
         self.u_list = u_list
         self.v_list = v_list
-        self.u = u
-        self.v = v
-        self.surface, self.basis_u, self.basis_v, self.basis_du, self.basis_dv = \
-            surface_eval(p, q, p_matrix, u_list, v_list, u, v)
 
-    def normal(self):
-        """Computes the surface normal of the B-Spline surface"""
-        s_du = np.einsum('ni,nmd,mj->ijd', self.basis_du, self.p_matrix, self.basis_v)
-        s_dv = np.einsum('ni,nmd,mj->ijd', self.basis_u, self.p_matrix, self.basis_dv)
-        return np.cross(s_du, s_dv)
+    def points(self, u, v):
+        """Computes te points in surface over u and v coordinates
+
+        Parameters
+        ----------
+        u: numpy.array
+            The coordinates of u
+        v: numpy.array
+            The coordinates of v
+        """
+        basis_u = get_basis_vector(u, self.u_list, self.p)
+        basis_v = get_basis_vector(v, self.v_list, self.q)
+        return np.einsum('ni,nmd,mj->ijd', basis_u, self.p_matrix, basis_v)
+
+    def derivatives(self, u, v, k, l):
+        """Computes the partial derivatives of any order d in [0, k+l]
+
+        Parameters
+        ----------
+        u: numpy.array
+            The coordinates of u
+        v: numpy.array
+            The coordinates of v
+        k: int
+            The order of derivative in u direction, k <= p
+        l: int
+            The order of derivative in v direction, l <= q
+        """
+        basis_k = get_basis_dk_vector(u, self.u_list, self.p, k)
+        basis_l = get_basis_dk_vector(v, self.v_list, self.q, l)
+        return np.einsum('ni,nmd,mj->ijd', basis_k, self.p_matrix, basis_l)
+
+    def normal(self, u, v, unit=True):
+        """Computes the surface normal of the B-Spline surface
+
+        Parameters
+        ----------
+        u: numpy.array
+            The coordinates of u
+        v: numpy.array
+            The coordinates of v
+        unit: bool, optional
+            If is true return the unit normal field
+        """
+        s_du = self.derivatives(u, v, 1, 0)
+        s_dv = self.derivatives(u, v, 0, 1)
+        normal = np.cross(s_du, s_dv)
+        if unit:
+            normal /= np.linalg.norm(normal, axis=2)[:, :, None]
+        return normal
 
 
 class NurbsSurface(BsplineSurface):
-    def __init__(self, p, q, p_matrix, w_matrix, u_list, v_list, u, v):
+    def __init__(self, p, q, p_matrix, w_matrix, u_list, v_list):
         self.w_matrix = w_matrix
-        # reshape set of points and express in h. coord.
-        p_shape = p_matrix.shape
-        pw_list = homogeneous_coord(p_matrix.reshape(p_shape[0] * p_shape[1], p_shape[2]), w_matrix.reshape(-1))
-        # build the b-spline
-        super().__init__(p, q, pw_list.reshape(p_shape), u_list, v_list, u, v)
-        # perspective map
-        self.p_matrix = p_matrix
-        surf_shape = self.surface.shape
-        self.surface = perspective_map(self.surface.reshape(surf_shape[0] * surf_shape[1], surf_shape[2]))
-        self.surface.shape = surf_shape
+        super().__init__(p, q, p_matrix, u_list, v_list)
+
+    def points(self, u, v):
+        p_matrix_backup = self.p_matrix.copy()  # backup of original matrix
+        m, n, _ = self.p_matrix.shape  # original c. points shape
+        self.p_matrix = homogeneous_coord(self.p_matrix.reshape(m * n, 3), self.w_matrix.reshape(-1))  # h. coord.
+        self.p_matrix.shape = (m, n, 4)  # reshape teh tensor
+        surf_points = super().points(u, v)  # compute the b-spline surface in homogeneous coord.
+        surf_points = perspective_map(surf_points.reshape(len(u) * len(v), 4))  # perspective map, 4D -> 3D
+        surf_points.shape = (len(u), len(v), 3)  # reshape the tensor
+        self.p_matrix = p_matrix_backup  # restore original c. points
+        return surf_points
+
+    def derivatives(self, u, v, k, l):
+        raise NotImplementedError('This function is not ready')
+
+    def normal(self, u, v):
+        raise NotImplementedError('This function is not ready')

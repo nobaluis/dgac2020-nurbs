@@ -27,5 +27,6 @@ if __name__ == '__main__':
     u_list = nurbs_ex[0].knots
     w_list = nurbs_ex[0].weights
     u = np.linspace(u_list[0], u_list[-1], 100)
-    spline = Nurbs(p, p_list, u_list, w_list, u)
-    plot_example(spline.curve, p_list)
+    spline = Nurbs(p, p_list, u_list, w_list)
+    points = spline.points(u)
+    plot_example(points, p_list)

@@ -18,10 +18,11 @@ for i in range(5):
     w_list = data.weights
     w_list[2] = i  # edit the middle weight
     u = np.linspace(u_list[0], u_list[-1], 100)
-    spline = bspline.Nurbs(p, p_list, u_list, w_list, u)
+    spline = bspline.Nurbs(p, p_list, u_list, w_list)
+    points = spline.points(u)
 
     # plot the spline
-    plt.plot(spline.curve[:, 0], spline.curve[:, 1])
+    plt.plot(points[:, 0], points[:, 1])
 
 # plot the control points
 plt.scatter(p_list[:, 0], p_list[:, 1], color='red')
